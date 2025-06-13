@@ -8,10 +8,6 @@ window.onload = function() {
       {
         url: "openapi/authentication/openapi.yaml",
         name: "Authentication"
-      },
-      {
-        url: "openapi/kc-admin/openapi.yaml",
-        name: "Keycloak Admin"
       }
     ],
     dom_id: '#swagger-ui',
