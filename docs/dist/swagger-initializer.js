@@ -8,6 +8,10 @@ window.onload = function() {
       {
         url: "./openapi/authentication/openapi.yaml",
         name: "Authentication"
+      },
+      {
+        url: "../openapi/authentication/openapi.yaml",
+        name: "Authentication 2"
       }
     ],
     dom_id: '#swagger-ui',
