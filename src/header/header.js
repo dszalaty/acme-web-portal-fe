@@ -4,7 +4,7 @@ const Header = () => {
 
     return (
         <div class="header">
-            Simple React App
+            Welcome to ACME
         </div>
     )
     

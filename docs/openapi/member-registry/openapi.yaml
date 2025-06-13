@@ -1,0 +1,448 @@
+openapi: 3.0.3
+
+########
+# info #
+########
+info:
+  title: 'GSP Members Registry API v0'
+  version: 0.0.1
+  # contact:
+  #   name: 'tbd'
+  #   email: 'tbd@tbd.com'
+  #   url: 'https://tbd.com/tbd'
+  # x-api-id: '07fa3386-449d-4963-9d55-9d45293190fb'
+  # x-audience: 'company-internal'
+  description: |
+    A set of endpoints for keeping members registry
+
+    # Change log
+
+    ## [0.0.1]
+    ### Added:
+    - `viewMemberRecord` and `updateMemberRecord` operations
+
+###########
+# servers #
+###########
+servers:
+  - description: 'Development Environment'
+    url: 'https://tbd/v1' # e.g. https://api.l1.com/gsp-membership/v1
+  # - description: 'UAT Environment'
+  #   url: 'https://tbd/v1'
+  # - description: 'Production Environment'
+  #   url: 'https://tbd/v1'
+
+########
+# tags #
+########
+tags:
+  - name: 'Authentication'
+    description: 'User (member) authentication-related operations'
+  - name: 'Member Records'
+    description: 'Operations dedicated for management of member records'
+
+#########
+# paths #
+#########
+paths:
+  '/{tenantId}/auth/token':
+    post:
+      operationId: 'getTokens'
+      summary: 'Get tokens'
+      description: |
+        Issues ID, access, and optionally refresh tokens in exchange for the Authorization Code obtained from the IdP after successful member authentication.
+
+        If the authenticated member is not yet registered, a new member record is created first.
+      tags:
+        - 'Authentication'
+      parameters: # Should we make this similar to OIDC token endpoint? Will that make it easer to use by member app (e.g. by means of a standard OIDC client)?
+        - $ref: '#/components/parameters/TenantId-GenericResourceIdentifier'
+      requestBody:
+        required: true
+        content:
+          x-www-form-urlencoded:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/TokenRequest'
+                - $ref: '#/components/schemas/RefreshRequest'
+            examples:
+              TokenRequest.JackSparrow:
+                $ref: '#/components/examples/TokenRequest.JackSparrow'
+              TokenRequest.JamesNorrington:
+                $ref: '#/components/examples/TokenRequest.JamesNorrington'
+              RefreshRequest.JackSparrow:
+                $ref: '#/components/examples/RefreshRequest.JackSparrow'
+              RefreshRequest.JamesNorrington:
+                $ref: '#/components/examples/RefreshRequest.JamesNorrington'
+      responses:
+        '200':
+          description: 'OK'
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum: ['no-store']
+                example: 'no-store'
+            Pragma:
+              schema:
+                type: string
+                enum: ['no-cache']
+                example: 'no-cache'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessfulTokenResponse'
+              examples:
+                TokenResponse.JackSparrow:
+                  $ref: '#/components/examples/SuccessfulTokenResponse.JackSparrow'
+                TokenResponse.JamesNorrington:
+                  $ref: '#/components/examples/SuccessfulTokenResponse.JamesNorrington'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  #---------------------
+  # member records paths
+  #---------------------
+  '/{tenantId}/members-registry/{memberId}':
+    get:
+      operationId: 'viewMemberRecord'
+      summary: 'View member record'
+      description: 'Provides a complete representation of a single member record (identified by member id) from the registry owned by the given tenant (identified by its id)'
+      tags:
+        - 'Member Records'
+      security:
+        - oAuth2-ac-dev: [] #tbd
+      parameters:
+        - $ref: '#/components/parameters/TenantId-GenericResourceIdentifier'
+        - $ref: '#/components/parameters/MemberId-GenericResourceIdentifier'
+      responses:
+        '200':
+          description: 'OK'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberRecordRepresentation'
+              examples:
+                MemberRecordRepresentation.JackSparrow:
+                  $ref: '#/components/examples/MemberRecordRepresentation.JackSparrow'
+                MemberRecordRepresentation.WilliamTurner:
+                  $ref: '#/components/examples/MemberRecordRepresentation.WilliamTurner'
+                MemberRecordRepresentation.JamesNorrington:
+                  $ref: '#/components/examples/MemberRecordRepresentation.JamesNorrington'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch: #put?
+      operationId: 'updateMemberRecord'
+      summary: 'Update member record'
+      description: |
+        Updates specified properties of the given member record (identified by member id).
+        
+        If any of the properties is not specified in the request, that property is not updated.
+      tags:
+        - 'Member Records'
+      security:
+        - oAuth2-ac-dev: []
+        - oAuth2-cc-dev: []
+      parameters:
+        - $ref: '#/components/parameters/TenantId-GenericResourceIdentifier'
+        - $ref: '#/components/parameters/MemberId-GenericResourceIdentifier'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberRecordUpdateRequest'
+            examples:
+                MemberRecordUpdateRequest.JackSparrow:
+                  $ref: '#/components/examples/MemberRecordUpdateRequest.JackSparrow'
+                MemberRecordUpdateRequest.WilliamTurner:
+                  $ref: '#/components/examples/MemberRecordUpdateRequest.WilliamTurner'
+                MemberRecordUpdateRequest.JamesNorrington:
+                  $ref: '#/components/examples/MemberRecordRepresentation.JamesNorrington'
+      responses:
+        '204':
+          description: 'Member record successfully updated' # tbd id token
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409': #???
+          $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+    delete:
+      operationId: 'tbd' # hard vs soft? is it really about record deletion, or just archive or deactivation? any anonymization in case of the archiving?
+      summary: 'tbd'
+      description: |
+        TBD desired member (identified by its id) from the registry owned by the given tenant (identified by its id).
+      tags:
+        - 'Member Records'
+      security:
+        - oAuth2-ac-dev: []
+      parameters:
+        - $ref: '#/components/parameters/TenantId-GenericResourceIdentifier'
+        - $ref: '#/components/parameters/MemberId-GenericResourceIdentifier'
+      responses:
+        '204':
+          description: 'Member record successfully deleted from the registry' # ???
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  '/{tenantId}/members-registry/{memberId}/communication-preferences': # marketing preferences??
+    get:
+      operationId: 'viewMemberCommunicationPreferences'
+      summary: 'View member communication preferences'
+      description: 'Provides a complete representation of the communication preferences of the given member (identified by its id) registered in the registry owned by the given tenant (identified by its id)'
+      tags:
+        - 'Member Records'
+      security:
+        - oAuth2-ac-dev: [] #tbd
+      parameters:
+        - $ref: '#/components/parameters/TenantId-GenericResourceIdentifier'
+        - $ref: '#/components/parameters/MemberId-GenericResourceIdentifier'
+      responses:
+        '200':
+          description: 'OK'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberCommunicationPreferencesRepresentation'
+              # examples:
+              #   MemberRecordRepresentation.JackSparrow:
+              #     $ref: '#/components/examples/MemberCommunicationPreferences.JackSparrow'
+              #   MemberRecordRepresentation.WilliamTurner:
+              #     $ref: '#/components/examples/MemberCommunicationPreferences.WilliamTurner'
+              #   MemberRecordRepresentation.JamesNorrington:
+              #     $ref: '#/components/examples/MemberCommunicationPreferences.JamesNorrington'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    # put:
+      
+
+##############
+# components #
+##############
+components:
+  #-----------------
+  # security schemes
+  #-----------------
+  securitySchemes:
+    oAuth2-ac-dev:
+      $ref: '../common-components/security-schemes.yaml#/components/securitySchemes/oAuth2-ac-dev'
+    oAuth2-cc-dev:
+      $ref: '../common-components/security-schemes.yaml#/components/securitySchemes/oAuth2-cc-dev'
+
+  #-----------
+  # parameters
+  #-----------
+  parameters:
+    TenantId-GenericResourceIdentifier:
+      in: path
+      name: 'tenantId'
+      description: |
+        Identifies tenant owning the members registry that desired member is registered in.
+
+        Must be one of the tenants recognized??? by the service.
+      required: true
+      schema:
+        $ref: '../common-components/schemas.yaml#/components/schemas/TenantId'
+      examples:
+        corg:
+          summary: 'casino.org'
+          value: 'corg'
+        cat:
+          summary: 'casino.at'
+          value: 'cat'
+    MemberId-GenericResourceIdentifier:
+      in: path
+      name: 'memberId'
+      description: 'Identifies desired member.'
+      required: true
+      schema:  # any specific schema for member identifiers?
+        $ref: '../common-components/schemas.yaml#/components/schemas/StringParam'
+      example: 'tbd'
+
+  #--------
+  # schemas
+  #--------
+  schemas:
+    # common schemas
+
+    # authentication schemas
+    TokenRequest:
+      $ref: '../authentication/openapi.yaml#/components/schemas/TokenRequest'
+    RefreshRequest:
+      $ref: '../authentication/openapi.yaml#/components/schemas/RefreshRequest'
+    SuccessfulTokenResponse:
+      $ref: '../authentication/openapi.yaml#/components/schemas/SuccessfulTokenResponse'
+
+    # member registry schemas
+    MemberFullName-Representation:
+      description: 'Full name of a given member'
+      allOf:
+        - $ref: '../common-components/schemas.yaml#/components/schemas/PersonFullName-Representation'
+    MemberEmailAddress-Representation:
+      description: 'E-mail address associated with the user account owned by a given member.'
+      allOf:
+        - $ref: '../common-components/schemas.yaml#/components/schemas/EmailAddress-Representation'
+    MemberEmailAddress-Valid:
+      description: 'E-mail address associated with the user account owned by a given member.'
+      allOf:
+        - $ref: '../common-components/schemas.yaml#/components/schemas/EmailAddress-Representation'
+    MemberPhoneNo-Representation:
+      description: 'TBD'
+    MemberRecordRepresentation:
+      title: 'Member Record'
+      type: object
+      properties: #TBD
+        name: # full or first and last separately?
+          $ref: '#/components/schemas/MemberFullName-Representation'
+        email:
+          $ref: '#/components/schemas/MemberEmailAddress-Representation'
+        address: # home address, correspondence address? how should it be structured?
+          description: 'tbd'
+          type: string
+        phoneNo:
+          description: 'tbd'
+          type: string # format? country code?
+        other: # TBD
+          title: 'tbd'
+          description: 'tbd - custom, tenant-specific data'
+          type: object
+          additionalProperties: true
+      required:
+        - name
+        - email
+      additionalProperties: true
+    MemberRecordUpdateRequest:
+      title: 'Member Record Update Request'
+      type: object
+      properties:
+        name:
+          description: |
+            Full name of a given member
+
+            Must be a valid person full name.
+          allOf:
+           - $ref: '../common-components/schemas.yaml#/components/schemas/PersonFullName-Valid'
+        # email:
+      minProperties: 1
+      additionalProperties: true
+    MemberCommunicationPreferencesRepresentation:
+      title: 'Member Communication Preferences'
+      type: object
+      properties:
+        # general:
+        # blog:
+        news:
+          title: 'tbd'
+          description: 'tbd'
+          type: boolean
+
+  #----------
+  # responses
+  #----------
+  responses:
+    # client error (4xx) responses
+    BadRequest:
+      $ref: '../common-components/responses.yaml#/components/responses/BadRequest'
+    Unauthorized:
+      $ref: '../common-components/responses.yaml#/components/responses/Unauthorized'
+    Forbidden:
+      $ref: '../common-components/responses.yaml#/components/responses/Forbidden'
+    NotFound:
+      $ref: '../common-components/responses.yaml#/components/responses/NotFound'
+    Conflict:
+      $ref: '../common-components/responses.yaml#/components/responses/Conflict'
+    UnsupportedMediaType:
+      $ref: '../common-components/responses.yaml#/components/responses/UnsupportedMediaType'
+    UnprocessableContent:
+      $ref: '../common-components/responses.yaml#/components/responses/UnprocessableContent'
+    BadGateway:
+      $ref: '../common-components/responses.yaml#/components/responses/BadGateway'
+
+  #---------
+  # examples
+  #---------
+  examples:
+    # token request examples
+    TokenRequest.JackSparrow:
+      $ref: '../authentication/openapi.yaml#/components/examples/TokenRequest.JackSparrow'
+    TokenRequest.JamesNorrington:
+      $ref: '../authentication/openapi.yaml#/components/examples/TokenRequest.JamesNorrington'
+
+    # refresh request examples
+    RefreshRequest.JackSparrow:
+      $ref: '../authentication/openapi.yaml#/components/examples/RefreshRequest.JackSparrow'
+    RefreshRequest.JamesNorrington:
+      $ref: '../authentication/openapi.yaml#/components/examples/RefreshRequest.JamesNorrington'
+
+    # token response examples
+    SuccessfulTokenResponse.JackSparrow:
+      $ref: '../authentication/openapi.yaml#/components/examples/SuccessfulTokenResponse.JackSparrow'
+    SuccessfulTokenResponse.JamesNorrington:
+      $ref: '../authentication/openapi.yaml#/components/examples/SuccessfulTokenResponse.JamesNorrington'
+
+    # member record representation examples
+    MemberRecordRepresentation.JackSparrow:
+      summary: 'Jack Sparrow (Black Pearl)'
+      value:
+        name: 'Jack Sparrow'
+        email: 'jsparrow@pirates-of-the-caribbean.org'
+        other:
+          ship: 'Black Pearl'
+    MemberRecordRepresentation.WilliamTurner:
+      summary: 'William Turner (Black Pearl)'
+      value:
+        name: 'William Turner'
+        email: 'wturner@pirates-of-the-caribbean.org'
+    MemberRecordRepresentation.JamesNorrington:
+      summary: 'James Norrington (HMS Interceptor)'
+      value:
+        name: 'James Norrington'
+        email: 'jnorrington@east-india-company.com'
+        other:
+          dateOfBirth: '1711-11-24'
+          title: 'Commodore of the Fleet'
+          ship: 'HMS Interceptor'
+
+    # member record update request examples
+    MemberRecordUpdateRequest.JackSparrow:
+      summary: 'Jack Sparrow (Black Pearl)'
+      value:
+        name: 'Jack Sparrow'
+        email: 'jsparrow@pirates-of-the-caribbean.org'
+    MemberRecordUpdateRequest.WilliamTurner:
+      summary: 'William Turner (Black Pearl)'
+      value:
+        name: 'William Turner'
+        email: 'wturner@pirates-of-the-caribbean.org'
+    MemberRecordUpdateRequest.JamesNorrington:
+      summary: 'James Norrington (HMS Interceptor)'
+      value:
+        name: 'James Norrington'
+        email: 'jnorrington@east-india-company.com'
+        other:
+          dateOfBirth: '1711-11-24'
+          title: 'Commodore of the Fleet'

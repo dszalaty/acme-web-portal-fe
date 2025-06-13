@@ -1,0 +1,1637 @@
+openapi: 3.0.3
+
+########
+# info #
+########
+info:
+  title: 'GSP Membership Authentication API v0'
+  version: 0.0.1
+  # contact:
+  #   name: 'tbd'
+  #   email: 'tbd@tbd.com'
+  #   url: 'https://tbd.com/tbd'
+  # x-api-id: '07fa3386-449d-4963-9d55-9d45293190fb'
+  # x-audience: 'company-internal'
+  description: |
+    An OIDC-compliant set of endpoints for members authentication.
+
+    # Change log
+
+    ## [0.0.1]
+    ### Added:
+    - `authenticateUser`, `getToken`, and `logUserOut` operations
+
+###########
+# servers #
+###########
+servers:
+  - description: 'Development Environment'
+    url: 'https://tbd/v1' # e.g. 'https://login.dev.l1.com'
+  - description: 'UAT Environment'
+    url: 'https://uat.tbd/v1' # e.g. 'https://login.uat.l1.com'
+  # - description: 'Production Environment'
+    # url: 'tbd' # e.g. 'https://login.l1.com'
+
+########
+# tags #
+########
+tags:
+  - name: 'Authorization Code Flow'
+    description: 'The Authorization Code Flow returns an Authorization Code to the Client, which can then exchange it for an ID Token and an Access Token (all tokens are returned from the Token Endpoint)'
+  # - name: 'Client Credentials Grant'
+  #   description: 'TBD'
+
+#########
+# paths #
+#########
+paths:
+  #------------------------------
+  # authorization code flow paths
+  #------------------------------
+  '/realms/{realm-name}/protocol/openid-connect/auth':
+    get:
+      operationId: 'authenticateUser'
+      summary: 'Authenticate user'
+      description: |
+        Initiates authentication of the End-User (provides log in form). After successful authentication the user agent is redirected to the `redirect_uri` specified in the request.
+
+        If the End-User is already authenticated, the log in form is skipped and the Authentication Response is returned immediately.
+
+        See also:
+        - Keycloak docs for [Authorization Endpoint](<https://www.keycloak.org/securing-apps/oidc-layers#_authorization_endpoint>)
+        - OIDC docs for [Authentication Request](<https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest>), [Successful Authentication Response](<https://openid.net/specs/openid-connect-core-1_0.html#AuthResponse>), and [Authentication Error Response](<https://openid.net/specs/openid-connect-core-1_0.html#AuthError>)
+      tags:
+        - 'Authorization Code Flow'
+      parameters:
+        - $ref: '#/components/parameters/RealmName'
+        - $ref: '#/components/parameters/ResponseType'
+        - $ref: '#/components/parameters/ClientId'
+        - $ref: '#/components/parameters/ClientSecret'
+        - $ref: '#/components/parameters/RedirectUri'
+        - $ref: '#/components/parameters/Scope'
+        - $ref: '#/components/parameters/State'
+        - $ref: '#/components/parameters/Prompt'
+        - $ref: '#/components/parameters/LoginHint'
+        # - in: query
+        #   name: 'code_challenge'
+        #   description: 'tbd'
+        #   schema:
+        #     type: string
+        #   required: false
+        # - in: query
+        #   name: 'code_challenge_method'
+        #   description: 'tbd'
+        #   schema:
+        #     type: string
+        #   required: false
+      responses:
+        '200':
+          description: 'OK'
+          content:
+            text/html:
+              schema:
+                $ref: '#/components/schemas/HtmlDoc'
+              examples:
+                LogInForm:
+                  $ref: '#/components/examples/LogInForm'
+                RegistrationForm:
+                  $ref: '#/components/examples/RegistrationForm'
+        '302':
+          description: 'Found'
+          headers:
+            Location:
+              description: 'The redirect URI specified in the authentication request'
+              required: true
+              schema:
+                $ref: '#/components/schemas/AuthenticationResponse'
+              examples:
+                SuccessfulAuthenticationResponse:
+                    $ref: '#/components/examples/SuccessfulAuthenticationResponse'
+                AuthenticationErrorResponse.InvalidRequest:
+                    $ref: '#/components/examples/AuthenticationErrorResponse.InvalidRequest'
+                AuthenticationErrorResponse.LoginRequired:
+                    $ref: '#/components/examples/AuthenticationErrorResponse.LoginRequired'
+        '400': # invalid client or redirect_uri
+          $ref: '#/components/responses/ErrorPage'
+        '404': # wrong url, non-existing realm, 
+          description: 'Not Found'
+          content:
+            text/html:
+              schema:
+                $ref: '#/components/schemas/HtmlDoc'
+              examples:
+                ErrorPage.PageNotFound:
+                    $ref: '#/components/examples/ErrorPage.PageNotFound'
+
+  '/realms/{realm-name}/protocol/openid-connect/token':
+    post:
+      operationId: 'getTokens'
+      summary: 'Get Tokens'
+      description: |
+        Issues ID, access, and refresh tokens in exchange for one of the following:
+        - the Authorization Code obtained from the IdP after successful member authentication
+        - the Refresh Token obtained previously with Access Token
+
+        See also:
+        - Keycloak docs for [Token Endpoint](<https://www.keycloak.org/securing-apps/oidc-layers#_token_endpoint>)
+        - OIDC docs for [Token Request](<https://openid.net/specs/openid-connect-core-1_0.html#TokenRequest>), [Successful Token Response](<https://openid.net/specs/openid-connect-core-1_0.html#TokenResponse>), and [Token Error Response](<https://openid.net/specs/openid-connect-core-1_0.html#TokenErrorResponse>)
+      tags:
+        - 'Authorization Code Flow'
+      parameters:
+        - $ref: '#/components/parameters/RealmName'
+      requestBody:
+        required: true
+        content:
+          x-www-form-urlencoded:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/TokenRequest'
+                - $ref: '#/components/schemas/RefreshRequest'
+            examples:
+              TokenRequest.JackSparrow:
+                $ref: '#/components/examples/TokenRequest.JackSparrow'
+              TokenRequest.JamesNorrington:
+                $ref: '#/components/examples/TokenRequest.JamesNorrington'
+              RefreshRequest.JackSparrow:
+                $ref: '#/components/examples/RefreshRequest.JackSparrow'
+              RefreshRequest.JamesNorrington:
+                $ref: '#/components/examples/RefreshRequest.JamesNorrington'
+      responses:
+        '200':
+          description: 'OK'
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum: ['no-store']
+                example: 'no-store'
+            Pragma:
+              schema:
+                type: string
+                enum: ['no-cache']
+                example: 'no-cache'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessfulTokenResponse'
+              examples:
+                TokenResponse.JackSparrow:
+                  $ref: '#/components/examples/SuccessfulTokenResponse.JackSparrow'
+                TokenResponse.JamesNorrington:
+                  $ref: '#/components/examples/SuccessfulTokenResponse.JamesNorrington'
+        '400':
+          description: 'Bad Request'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenErrorResponse'
+              examples:
+                UnsupportedGrantType:
+                  summary: 'Unsupported Grant Type'
+                  value:
+                    error: 'unsupported_grant_type'
+                    error_description: 'Unsupported grant_type'
+                InvalidClient:
+                  summary: 'Invalid Client'
+                  value:
+                    error: 'invalid_client'
+                    error_description: 'Invalid client or Invalid client credentials'
+                InvalidGrant:
+                  summary: 'Invalid Authorization Grand'
+                  value:
+                    error: 'invalid_grant'
+                    error_description: 'Code not valid'
+        '404':
+          description: 'Not Found'
+          content:
+            application/json:
+              schema:
+                type: object
+                description: 'tbd'
+                properties:
+                  error:
+                    title: 'Error'
+                    description: 'A short, human-readable summary of the error'
+                    type: string
+                    example: 'Realm does not exist'
+
+  # '/realms/{realm-name}/protocol/openid-connect/token/introspection':
+  '/realms/{realm-name}/protocol/openid-connect/logout':
+    get:
+      operationId: 'tbd'
+      summary: 'Log user out (front-channel)'
+      description: |
+        Logs out the authenticated member.
+
+        After the logout has been performed, the User Agent is redirected to the redirect URI specified in the request.
+      tags:
+        - 'Authorization Code Flow'
+      parameters:
+        - $ref: '#/components/parameters/RealmName'
+        - $ref: '#/components/parameters/IdTokenHint'
+        - $ref: '#/components/parameters/PostLogoutRedirectUri'
+        - $ref: '#/components/parameters/State'
+      responses:
+        '302':
+          description: 'Found'
+          headers:
+            Location:
+              description: 'The post logout redirect uri specified in the logout request.'
+              required: true
+              schema:
+                type: string
+                format: uri
+                example: 'https://black-pearl.com/post-logout?state=TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQ'
+        '400': # invalid client or redirect_uri
+          $ref: '#/components/responses/ErrorPage'
+    # post:
+    #   operationId: 'logUserOut'
+    #   summary: 'Log user out'
+    #   description: |
+    #     tbd
+
+    #     See also:
+    #     - Keycloak docs for [Logout Endpoint](<https://www.keycloak.org/securing-apps/oidc-layers#_logout_endpoint>)
+    #     - OIDC docs for [RP-Initiated Logout](<https://openid.net/specs/openid-connect-rpinitiated-1_0.html#RPLogout>)
+    #   tags:
+    #     - 'Authorization Code Flow'
+    #   parameters:
+    #     - $ref: '#/components/parameters/RealmName'
+    #   requestBody:
+    #     required: true
+    #     content:
+    #       x-www-form-urlencoded:
+    #         schema:
+    #           $ref: '#/components/schemas/LogoutRequest'
+    #         examples:
+    #           TokenRequest.JackSparrow:
+    #             $ref: '#/components/examples/LogoutRequest.JackSparrow'
+    #   responses:
+    #     '204':
+    #       description: 'No Content'
+
+
+
+##############
+# components #
+##############
+components:
+  #-----------
+  # parameters
+  #-----------
+  parameters:
+    RealmName:
+      in: path
+      name: realm-name
+      description: 'Name of the realm corresponding to the tenant'
+      required: true
+      schema:
+        $ref: '#/components/schemas/RealmName'
+      examples:
+        PiratesOfTheCaribbean:
+          summary: 'Pirates of the Caribbean'
+          value: 'pirates-of-the-caribbean'
+        LordOfTheRings:
+          summary: 'Lord of the Rings'
+          value: 'lotr'
+    ResponseType:
+      in: query
+      name: 'response_type'
+      description: |
+        OAuth 2.0 Response Type value that determines the authorization processing flow to be used.
+
+        The `response type` specified in the Authorization Request for the Authorization Code Flow must be `code`.
+      required: true
+      schema:
+        $ref: '#/components/schemas/ResponseType'
+    ClientId:
+      in: query
+      name: 'client_id'
+      description: 'Client identifier assigned to the product app'
+      required: true
+      schema:
+        $ref: '#/components/schemas/ClientId'
+      examples:
+        PiratesOfTheCaribbean.BlackPearl:
+          summary: 'Black Pearl (Pirates of the Caribbean)'
+          value: 'black-pearl'
+        PiratesOfTheCaribbean.HmsInterceptor:
+          summary: 'HMS Interceptor (Pirates of the Caribbean)'
+          value: 'hms-interceptor'
+        Lotr.TheFellowshipOfTheRing:
+          summary: 'The Fellowship of the Ring (LOTR)'
+          value: 'tfotr'
+
+    ClientSecret:
+      in: query
+      name: 'client_secret'
+      description: 'Client secret granted to the product app'
+      required: true
+      schema:
+        $ref: '#/components/schemas/ClientSecret'
+    RedirectUri:
+      in: query
+      name: 'redirect_uri'
+      description: |
+        The URL to which the browser is redirected to after authorization has been granted by the user.
+
+        Must be one of the redirect URIs registered for the given client.
+      required: true
+      schema:
+        $ref: '#/components/schemas/RedirectUri'
+      examples:
+        PiratesOfTheCaribbean.BlackPearl:
+          summary: 'Black Pearl (Pirates of the Caribbean)'
+          value: 'https://black-pearl.com/post-auth'
+        PiratesOfTheCaribbean.HmsInterceptor:
+          summary: 'HMS Interceptor (Pirates of the Caribbean)'
+          value: 'https://hms-interceptor.uk/auth/callback'
+        Lotr.TheFellowshipOfTheRing:
+          summary: 'The Fellowship of the Ring (LOTR)'
+          value: 'https://tfotr.org/auth/post-login'
+    PostLogoutRedirectUri:
+      in: query
+      name: 'post_logout_redirect_uri'
+      description: |
+        The URI to which the User Agent is redirected to after a logout has been performed.
+
+        Must be one of the post-logout redirect URIs registered for the given client.
+      required: true
+      schema:
+        $ref: '#/components/schemas/PostLogoutRedirectUri'
+      examples:
+        PiratesOfTheCaribbean.BlackPearl:
+          summary: 'Black Pearl (Pirates of the Caribbean)'
+          value: 'https://black-pearl.com/post-logout'
+        PiratesOfTheCaribbean.HmsInterceptor:
+          summary: 'HMS Interceptor (Pirates of the Caribbean)'
+          value: 'https://hms-interceptor.uk/auth/callback'
+        Lotr.TheFellowshipOfTheRing:
+          summary: 'The Fellowship of the Ring (LOTR)'
+          value: 'https://tfotr.org/auth/post-logout'
+    Scope:
+      in: query
+      name: 'scope'
+      description: |
+        Must contain `openid` value.
+      required: true
+      schema:
+        allOf:
+          - $ref: '#/components/schemas/Scope'
+        pattern: ^\S*openid\S*?$
+    State:
+      in: query
+      name: 'state'
+      description: 'Opaque value used to maintain state between the request and the response'
+      required: false # ???
+      schema:
+        $ref: '#/components/schemas/State'
+    LoginHint:
+      in: query
+      name: 'login_hint'
+      description: 'Hint to the Authorization Server about the login identifier (e-mail address) the End-User might use to authenticate'
+      required: false
+      schema:
+        $ref: '#/components/schemas/LoginHint'
+    Prompt:
+      in: query
+      name: 'prompt'
+      description: |
+        Specifies whether the End-User is prompted for reauthentication.
+
+        The prompt specified in the Authentication Request must be one of the following:
+        - `none` - The End-User is not requested for authentication (the log in form is not displayed). If the End-User is not already authenticated, an `login_required` error is returned.
+        - `login` - The End-User must be prompted for authentication or reauthentication, even if the End-User is already logged in.
+        - `create` - The End-User is prompted for registration (the registrations form is displayed) instead of authentication
+      required: false
+      schema:
+        $ref: '#/components/schemas/Prompt'
+      examples:
+        None:
+          summary: 'none'
+          value: 'none'
+        Login:
+          summary: 'login'
+          value: 'login'
+        Create:
+          summary: 'create'
+          value: 'create'
+    IdTokenHint:
+      in: query
+      name: 'id_token_hint'
+      description: 'ID Token previously issued to the client used as an indication of the identity of the member requesting to be logged out.'
+      required: true
+      schema:
+        $ref: '#/components/schemas/IdToken'
+
+
+      # post_logout_redirect_uri
+
+  #--------
+  # schemas
+  #--------
+  schemas:
+    # common schemas:
+    StringParam:
+      $ref: '../common-components/schemas.yaml#/components/schemas/StringParam'
+    HtmlDoc:
+      title: 'HTML Doc'
+      description: 'An HTML page'
+      type: string
+    
+    # IdP (Keycloak) schemas
+    RealmName:
+      title: 'Realm Name'
+      description: ''
+      type: string
+      example: 'pirates-of-the-caribbean'
+    
+    # oidc schemas
+    ResponseType:
+      title: 'Response Type'
+      description: 'OAuth 2.0 Response Type value that determines the authorization processing flow to be used'
+      type: string
+      enum: ['code']
+      example: 'code'
+    ClientId:
+      title: 'Client ID'
+      description: 'Client identifier assigned to the product app'
+      type: string
+      minLength: 1
+      maxLength: 255
+      example: 'black-pearl'
+    ClientSecret:
+      title: 'Client Secret'
+      description: 'Client secret granted to the product app'
+      type: string
+      minLength: 1
+      maxLength: 255
+      example: 'euVXfNksq43R0XtE1NSMeSlzqK00tHgx'
+    RedirectUri:
+      title: 'Redirect URI'
+      description: |
+        The URI to which the user agent is redirected to after authorization has been granted by the user.
+
+        Must be one of the redirect URIs registered for the given client.
+      allOf:
+        - $ref: '../common-components/schemas.yaml#/components/schemas/Uri-Valid'
+      example: 'https://black-pearl.com/post-auth'
+    PostLogoutRedirectUri:
+      title: 'Redirect URI'
+      description: |
+        The URI to which the User Agent is redirected to after a logout has been performed.
+
+        Must be one of the post-logout redirect URIs registered for the given client.
+      allOf:
+        - $ref: '../common-components/schemas.yaml#/components/schemas/Uri-Valid'
+      example: 'https://black-pearl.com/post-logout'
+    Scope:
+      title: 'Scope'
+      description: 'tbd'
+      type: string
+      minLength: 1
+      maxLength: 255
+      example: 'openid'
+    State:
+      title: 'Scope'
+      description: 'Opaque value used to maintain state between the request and the response'
+      type: string
+      minLength: 1
+      maxLength: 255
+      example: 'TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQ'
+    Prompt:
+      title: 'Prompt'
+      description: 'Specifies whether the End-User is prompted for authentication.'
+      type: string
+      enum: ['none','login','create']  # also 'consent' and 'select_account', 'create' is KC specific
+    LoginHint:
+      description: 'Hint to the Authorization Server about the login identifier (e-mail address) the End-User might use to authenticate'
+      allOf:
+        - $ref: '../common-components/schemas.yaml#/components/schemas/EmailAddress-Representation'
+    GrantType:
+      title: 'Grant Type'
+      description: 'tbd'
+      type: string
+      enum: ['authorization_code','client_credentials']
+    Jwt:
+      title: 'JWT'
+      description: 'A JSON Web Token as defined by [RFC 7519](<https://tools.ietf.org/html/>)'
+      type: string
+      example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c'
+    AccessToken:
+      title: 'Access Token'
+      description: 'A JWT ([RFC 7519](<https://tools.ietf.org/html/>)) representing an authorization issued to the client and used to access protected resources'
+      allOf:
+        - $ref: '#/components/schemas/Jwt'
+      example: 'eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJIYzRmb3huMzRxLXlSRTNPdFdtaVNta0hTYVc4YUgwUnVKNDdpYzNNUmIwIn0.eyJleHAiOjE3NDkxMTM2MDAsImlhdCI6MTc0OTExMzMwMCwiYXV0aF90aW1lIjoxNzQ5MTEzMjg4LCJqdGkiOiIxYjBlZWRhMy1kMjBlLTRhZDAtODdmYS1kMmUzZTkyZTcwOTYiLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwOTEvcmVhbG1zL2NvcmciLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiMjIwNzc5YmEtZjE4YS00MWU3LWEyMWMtODFhYjlhNjA3MzZhIiwidHlwIjoiQmVhcmVyIiwiYXpwIjoiY29yZ3dlYiIsInNpZCI6IjM1YWY5MmZmLWFkOGYtNGU2Ny04NGU3LWQzZTg0MjFkNTVlZSIsImFjciI6IjEiLCJhbGxvd2VkLW9yaWdpbnMiOlsiaHR0cDovL2xvY2FsaG9zdDozMDAwIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXRob3JpemF0aW9uIiwiZGVmYXVsdC1yb2xlcy1jb3JnIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJvcGVuaWQgZW1haWwgcHJvZmlsZSIsInRlcm1zX2FuZF9jb25kaXRpb25zIjoxNzQ1MzA4NzUxLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwibmFtZSI6IlBldGVyIEhhd2siLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJwaGF3ayIsImdpdmVuX25hbWUiOiJQZXRlciIsImZhbWlseV9uYW1lIjoiSGF3ayIsImVtYWlsIjoicGhhd2tAZHNoci4zM21haWwuY29tIn0.GbYLS8XWSb_FUgnxdLzkx11f3Q8B3ebBvziOzarmZjkFazVfX_O6yhFogLsjAWec1LFhZerI1l1yrgumJ353JMnzEOAIiytKovf9Jpm4wUWdWBX7al5pg0dEQZ8aVFFDaxOJ3aO-_DO6y0CQoW74WfM0FiOZymO3gNVyGyXxcV24JgGmqNF3J1GkV5BmiTUowskicQ49dkFHwVUekrFdp8Is5Oi4NElDbp0ORAbufJ91oDS-4bX7Ms5FLjgzfPUM6oU45-Y0RjUD67i_6L741T-t6bUIwdtv-Jo_LTRO1eJ_9_itllsOM9NC53QoEUQQJYgRJB9XTBNzpInLXFbHxA'
+    RefreshToken:
+      title: 'Refresh Token'
+      description: 'A JWT ([RFC 7519](<https://tools.ietf.org/html/>)) used to obtain new access token using the same authorization grant'
+      allOf:
+        - $ref: '#/components/schemas/Jwt'
+      example: 'eyJhbGciOiJIUzUxMiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJkNDY0Y2VhYS03NzBjLTQ2MWMtYTQyOC02NTdlMWM3M2Q0ZmUifQ.eyJleHAiOjE3NDkxMTUxMDAsImlhdCI6MTc0OTExMzMwMCwianRpIjoiZWU3M2FiNjktYWJmZS00YTUzLThkMDItNThhZjU4Y2MzNDc4IiwiaXNzIjoiaHR0cDovL2xvY2FsaG9zdDo4MDkxL3JlYWxtcy9jb3JnIiwiYXVkIjoiaHR0cDovL2xvY2FsaG9zdDo4MDkxL3JlYWxtcy9jb3JnIiwic3ViIjoiMjIwNzc5YmEtZjE4YS00MWU3LWEyMWMtODFhYjlhNjA3MzZhIiwidHlwIjoiUmVmcmVzaCIsImF6cCI6ImNvcmd3ZWIiLCJzaWQiOiIzNWFmOTJmZi1hZDhmLTRlNjctODRlNy1kM2U4NDIxZDU1ZWUiLCJzY29wZSI6Im9wZW5pZCBlbWFpbCBiYXNpYyBhZ2VfZGVjbGFyYXRpb24gYWNyIHdlYi1vcmlnaW5zIHJvbGVzIHByb2ZpbGUifQ.9AicM41QrTFXDu7NRWZjr58WItVwy_L_qCStrNOitWUplvm9FtSzoiKycApQ8QD1NgBRRChwrvmSRr4eFI4nwg'
+    IdToken:
+      title: 'ID Token'
+      description: 'A JWT ([RFC 7519](<https://tools.ietf.org/html/>)) that contains claims about the authentication of a member, and potentially other requested claims.'
+      allOf:
+        - $ref: '#/components/schemas/Jwt'
+      example: 'eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJIYzRmb3huMzRxLXlSRTNPdFdtaVNta0hTYVc4YUgwUnVKNDdpYzNNUmIwIn0.eyJleHAiOjE3NDc4MTIzMDEsImlhdCI6MTc0NzgxMjAwMSwiYXV0aF90aW1lIjoxNzQ3ODEwMTc5LCJqdGkiOiJmNjNhOGJiZS0wMjMwLTRkZjYtODI4Yi03MDZkNjMzY2JmM2IiLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwOTEvcmVhbG1zL2NvcmciLCJhdWQiOiJjb3Jnd2ViIiwic3ViIjoiMjIwNzc5YmEtZjE4YS00MWU3LWEyMWMtODFhYjlhNjA3MzZhIiwidHlwIjoiSUQiLCJhenAiOiJjb3Jnd2ViIiwic2lkIjoiZGVmMjgwNzktNjk1Ni00Y2EzLWJhYjctYzk5Y2MxZGI1OTM4IiwiYXRfaGFzaCI6ImFzXzRUWllERHpNcjNXT29CeGFSQWciLCJhY3IiOiIwIiwidGVybXNfYW5kX2NvbmRpdGlvbnMiOjE3NDUzMDg3NTEsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoiUGV0ZXIgSGF3ayIsInByZWZlcnJlZF91c2VybmFtZSI6InBoYXdrIiwiZ2l2ZW5fbmFtZSI6IlBldGVyIiwiZmFtaWx5X25hbWUiOiJIYXdrIiwiYWdlX2RlY2xhcmF0aW9uIjoieWVzIiwiZW1haWwiOiJwaGF3a0Bkc2hyLjMzbWFpbC5jb20ifQ.NcuaEXC0rrKeqOCb6p-OKTkD3vC7tAfkgXGBdVWX45-bQ9peMv_Dm1OZ75I0Es6i512wzdykq4GfHjLJCd0B1D53vGDLBMY03I-Nzw9or86gbbIw5J-MaTTgSmr9HqBVeYn7h5FJZiV-ilG9l8rQuowhZ5jLyo26kbkyqwlLueblMDofTytIBjF-r6gVTQFd5KGirpiN8dv7atI7b1pPocAhrDJC9b7QPmbqq5-usImrDL_qEPS7pr-V4X_j0h7vQzvYvZ2pnhL1jeGPaFpaS6V-TBMFzMyt_JMcj5OsBZ_ZuMjvncWfWxxOH9V35akm6773XeXj2qBiHVZ4EnErlA'
+    AuthenticationResponse:
+      title: 'Authentication Response'
+      description: |
+        See OIDC docs for [Successful Authentication Response]'(<https://openid.net/specs/openid-connect-core-1_0.html#AuthResponse>) and [Authentication Error Response]'(<https://openid.net/specs/openid-connect-core-1_0.html#AuthError>)
+      type: string
+      format: uri
+      example: 'https://black-pearl.com/post-auth?state=TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQ&session_state=485a7437-eec0-430b-b65d-b1546c6cd4bc&iss=http%3A%2F%2Flocalhost%3A8091%2Frealms%2Fcorg&code=25c58f0d-f523-4e05-ba5e-38f67ca079ac.485a7437-eec0-430b-b65d-b1546c6cd4bc.d58eb1dc-37de-4438-8651-d349ebf2d9a4'
+    TokenRequest:
+      title: 'Token Request'
+      type: object
+      properties:
+        grant_type:
+          title: 'Grant Type'
+          description: 'The grant type specified in the token request for Authorization Code Flow must be `authorization_code`'
+          type: string
+          enum: ['authorization_code']
+        client_id:
+          $ref: '#/components/schemas/ClientId'
+        client_secret:
+          $ref: '#/components/schemas/ClientSecret'
+        code:
+          title: 'Authorization Code'
+          description: 'The authorization code obtained from the IdP after successful user authentication.'
+          type: string
+          example: '79785abc-0ffe-4537-9f3f-cf19e3b0aa5b.def28079-6956-4ca3-bab7-c99cc1db5938.d58eb1dc-37de-4438-8651-d349ebf2d9a4'
+        redirect_uri:
+          description: |
+            Must be the same as the redirect URI specified in the Authentication Request used to obtain the authorization code.
+          allOf:
+            - $ref: '#/components/schemas/RedirectUri'
+      required:
+        - grant_type
+        - client_id
+        - client_secret
+        - code
+        - redirect_uri
+    RefreshRequest:
+      title: 'Refresh Request'
+      type: object
+      properties:
+        grant_type:
+          title: 'Grant Type'
+          description: 'The grant type specified in the refresh request must be `refresh_token`'
+          type: string
+          enum: ['refresh_token']
+        client_id:
+          $ref: '#/components/schemas/ClientId'
+        client_secret:
+          $ref: '#/components/schemas/ClientSecret'
+        refresh_token:
+          description: 'The refresh token obtained by means of the previous token request'
+          allOf:
+            - $ref: '#/components/schemas/RefreshToken'
+      required:
+        - grant_type
+        - client_id
+        - client_secret
+        - refresh_token
+    SuccessfulTokenResponse:
+      title: 'Token Response'
+      type: object
+      properties: 
+        access_token:
+          $ref: '#/components/schemas/AccessToken'
+        token_type:
+          title: 'Token Type'
+          description: |
+            The type of the access token issued that provides information required to successfully utilize the token to make a protected resource request.
+
+            The `Bearer' type ([RFC 6750](<https://datatracker.ietf.org/doc/html/rfc6750>)) is utilized by including the access token string in the request.
+          type: string
+          enum: ['Bearer']
+          example: 'Bearer'
+        expires_in:
+          title: 'Access Token Lifetime'
+          description: 'The lifetime of the access token in seconds from the time the response was generated'
+          type: integer
+          example: 300
+        refresh_token:
+          $ref: '#/components/schemas/RefreshToken'
+        # scope:
+        id_token:
+          $ref: '#/components/schemas/IdToken'
+      required:
+        - 'access_token'
+        - 'token_type'
+        - 'expires_in'
+        - 'id_token'
+    TokenErrorResponse:
+      type: object
+      description: 'tbd'
+      properties:
+        error:
+          title: 'Error Code'
+          description: |
+            One of the following error codes:
+            - `invalid_request`: The request is missing a required parameter, includes an unsupported parameter value (other than grant type), repeats a parameter, includes multiple credentials, utilizes more than one mechanism for authenticating the client, or is otherwise malformed.
+            - 'invalid_client': Client authentication failed (e.g., unknown client, invalid client secret)
+            - `invalid_grant`: The provided authorization grant (authorization
+               code or refresh token) is invalid, expired, revoked, does not match the redirection URI used in the authorization request, or was issued to
+               another client.
+            - `unauthorized_client`: The authenticated client is not authorized to use this authorization grant type.
+            - `unsupported_grant_type`
+            - `invalid_scope`
+          type: string
+          enum: ['invalid_request','invalid_client','invalid_grant','unauthorized_client','unsupported_grant_type','invalid_scope']
+          example: 'invalid_grant'
+        error_description:
+          title: 'Error Description'
+          description: 'Human-readable text providing additional information helping to understanding the error that occurred.'
+          type: string
+          example: 'Code not valid'
+      required:
+        - error
+    LogoutRequest:
+      title: 'Logout Request'
+      type: object
+      properties:
+        client_id:
+          $ref: '#/components/schemas/ClientId'
+        client_secret:
+          $ref: '#/components/schemas/ClientSecret'
+        refresh_token:
+          description: 'The refresh token obtained by means of the previous token request'
+          allOf:
+            - $ref: '#/components/schemas/RefreshToken'
+        post_logout_redirect_uri:
+          $ref: '#/components/schemas/PostLogoutRedirectUri'
+      required:
+        - client_id
+        - client_secret
+        - refresh_token
+        - redirect_uri
+  #----------
+  # responses
+  #----------
+  responses:
+    ErrorPage:
+      description: 'Bad Request'
+      content:
+        text/html:
+          schema:
+            $ref: '#/components/schemas/HtmlDoc'
+          examples:
+            ErrorPage.PageNotFound:
+                $ref: '#/components/examples/ErrorPage.PageNotFound'
+            ErrorPage.ClientNotFound:
+                $ref: '#/components/examples/ErrorPage.ClientNotFound'
+            ErrorPage.InvalidParameter:
+                $ref: '#/components/examples/ErrorPage.InvalidParameter'
+
+  #---------
+  # examples
+  #---------
+  examples:
+    # authentication response examples
+    LogInForm:
+      summary: 'Log in Form'
+      value: |
+        <!DOCTYPE html>
+        <html class="login-pf" lang="en">
+
+        <head>
+            <meta charset="utf-8">
+            <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+            <meta name="robots" content="noindex, nofollow">
+            <meta name="color-scheme" content="light dark">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+
+            <title>Sign in to corg</title>
+            <link rel="icon" href="/resources/6nexk/login/keycloak.v2/img/favicon.ico" />
+                    <link href="/resources/6nexk/common/keycloak/vendor/patternfly-v5/patternfly.min.css" rel="stylesheet" />
+                    <link href="/resources/6nexk/common/keycloak/vendor/patternfly-v5/patternfly-addons.css" rel="stylesheet" />
+                    <link href="/resources/6nexk/login/keycloak.v2/css/styles.css" rel="stylesheet" />
+            <script type="importmap">
+                {
+                    "imports": {
+                        "rfc4648": "/resources/6nexk/common/keycloak/vendor/rfc4648/rfc4648.js"
+                    }
+                }
+            </script>
+              <script type="module" async blocking="render">
+                  const DARK_MODE_CLASS = "pf-v5-theme-dark";
+                  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+                  updateDarkMode(mediaQuery.matches);
+                  mediaQuery.addEventListener("change", (event) => updateDarkMode(event.matches));
+
+                  function updateDarkMode(isEnabled) {
+                    const { classList } = document.documentElement;
+
+                    if (isEnabled) {
+                      classList.add(DARK_MODE_CLASS);
+                    } else {
+                      classList.remove(DARK_MODE_CLASS);
+                    }
+                  }
+              </script>
+            <script type="module" src="/resources/6nexk/login/keycloak.v2/js/passwordVisibility.js"></script>
+            <script type="module">
+                import { startSessionPolling } from "/resources/6nexk/login/keycloak.v2/js/authChecker.js";
+
+                startSessionPolling(
+                    "/realms/corg/login-actions/restart?client_id=corgweb&tab_id=k9aL4L-OiQE&client_data=eyJydSI6Imh0dHBzOi8vbG9jYWxob3N0OjMwMDAvYXV0aC9jYWxsYmFjayIsInJ0IjoiY29kZSJ9&skip_logout=true"
+                );
+            </script>
+                <script type="module">
+                    import { checkAuthSession } from "/resources/6nexk/login/keycloak.v2/js/authChecker.js";
+
+                    checkAuthSession(
+                        "sKdD09cdF0v/9kPc4+pJP4u2+nAGMww9PaN0URG58SY"
+                    );
+                </script>
+            <script>
+              // Workaround for https://bugzilla.mozilla.org/show_bug.cgi?id=1404468
+              const isFirefox = true;
+            </script>
+        </head>
+
+        <body id="keycloak-bg" class="">
+        <div class="pf-v5-c-login">
+          <div class="pf-v5-c-login__container">
+            <header id="kc-header" class="pf-v5-c-login__header">
+              <div id="kc-header-wrapper"
+                      class="pf-v5-c-brand">corg</div>
+            </header>
+            <main class="pf-v5-c-login__main">
+              <div class="pf-v5-c-login__main-header">
+                <h1 class="pf-v5-c-title pf-m-3xl" id="kc-page-title"><!-- template: login-username.ftl -->
+
+                Sign in to your account
+
+        </h1>
+              </div>
+              <div class="pf-v5-c-login__main-body">
+
+
+        <!-- template: login-username.ftl -->
+
+                <div id="kc-form">
+                    <div id="kc-form-wrapper">
+                            <form id="kc-form-login" class="pf-v5-c-form" onsubmit="login.disabled = true; return true;" action="http://localhost:8091/realms/corg/login-actions/authenticate?session_code=F2YdmIjN7hMufu_w7AIpou-8Nuqv1fVgmZ5FKxTD6-U&amp;execution=8d729f0a-9e2f-473e-98a8-39a5f000d4a2&amp;client_id=corgweb&amp;tab_id=k9aL4L-OiQE&amp;client_data=eyJydSI6Imh0dHBzOi8vbG9jYWxob3N0OjMwMDAvYXV0aC9jYWxsYmFjayIsInJ0IjoiY29kZSJ9"
+                                  method="post">
+                                    <div class="pf-v5-c-form__group">
+
+        <div class="pf-v5-c-form__group">
+            <div class="pf-v5-c-form__label">
+                <label for="username" class="pf-v5-c-form__label">
+                <span class="pf-v5-c-form__label-text">
+                                                        Username or email
+
+                </span>
+                </label>
+            </div>
+
+            <span class="pf-v5-c-form-control ">
+                <input id="username" name="username" value="phawk@dshr.33mail.com" type="text" autocomplete="username" autofocus
+                        aria-invalid=""/>
+            </span>
+
+            <div id="input-error-container-username">
+            </div>
+        </div>
+
+
+                                    </div>
+
+                                <div class="pf-v5-c-form__group">
+                                </div>
+
+          <div class="pf-v5-c-form__group">
+            <div class="pf-v5-c-form__actions">
+          <button class="pf-v5-c-button pf-m-primary pf-m-block " name="login" id="kc-login" type="submit">Sign In</button>
+            </div>
+          </div>
+                            </form>
+                    </div>
+                </div>
+
+
+
+
+                  <div id="kc-info" class="">
+                      <div id="kc-info-wrapper" class="">
+        <!-- template: login-username.ftl -->
+
+                    <div id="kc-registration">
+                        <span>New user? <a href="/realms/corg/login-actions/registration?client_id=corgweb&amp;tab_id=k9aL4L-OiQE&amp;client_data=eyJydSI6Imh0dHBzOi8vbG9jYWxob3N0OjMwMDAvYXV0aC9jYWxsYmFjayIsInJ0IjoiY29kZSJ9">Register</a></span>
+                    </div>
+
+                      </div>
+                  </div>
+              </div>
+              <div class="pf-v5-c-login__main-footer">
+        <!-- template: login-username.ftl -->
+
+          <div class="pf-v5-c-login__main-footer-band">
+              <p class="pf-v5-c-login__main-footer-band-item">
+                  Or sign in with
+              </p>
+          </div>
+          <div id="kc-social-providers" class="">
+              <ul class="pf-v5-c-login__main-footer-links ">
+                      <li class="pf-v5-c-login__main-footer-links-item">
+                          <a id="social-google" class="pf-v5-c-login__main-footer-links-item-link " aria-label="Google"
+                                  type="button" href="/realms/corg/broker/google/login?client_id=corgweb&amp;tab_id=k9aL4L-OiQE&amp;client_data=eyJydSI6Imh0dHBzOi8vbG9jYWxob3N0OjMwMDAvYXV0aC9jYWxsYmFjayIsInJ0IjoiY29kZSJ9&amp;session_code=F2YdmIjN7hMufu_w7AIpou-8Nuqv1fVgmZ5FKxTD6-U">
+                                        <svg aria-hidden="true" viewBox="0 0 488 512">
+                                            <title id="title">Google</title>
+                                            <path d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"/>
+                                        </svg>
+                          </a>
+                      </li>
+              </ul>
+          </div>
+
+              </div>
+            </main>
+
+          </div>
+        </div>
+        </body>
+        </html>
+    RegistrationForm:
+      summary: 'Registration Form'
+      value: |
+        <!DOCTYPE html>
+        <html class="login-pf" lang="en">
+
+        <head>
+            <meta charset="utf-8">
+            <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+            <meta name="robots" content="noindex, nofollow">
+            <meta name="color-scheme" content="light dark">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+
+            <title>Sign in to corg</title>
+            <link rel="icon" href="/resources/6nexk/login/keycloak.v2/img/favicon.ico" />
+                    <link href="/resources/6nexk/common/keycloak/vendor/patternfly-v5/patternfly.min.css" rel="stylesheet" />
+                    <link href="/resources/6nexk/common/keycloak/vendor/patternfly-v5/patternfly-addons.css" rel="stylesheet" />
+                    <link href="/resources/6nexk/login/keycloak.v2/css/styles.css" rel="stylesheet" />
+            <script type="importmap">
+                {
+                    "imports": {
+                        "rfc4648": "/resources/6nexk/common/keycloak/vendor/rfc4648/rfc4648.js"
+                    }
+                }
+            </script>
+              <script type="module" async blocking="render">
+                  const DARK_MODE_CLASS = "pf-v5-theme-dark";
+                  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+                  updateDarkMode(mediaQuery.matches);
+                  mediaQuery.addEventListener("change", (event) => updateDarkMode(event.matches));
+
+                  function updateDarkMode(isEnabled) {
+                    const { classList } = document.documentElement;
+
+                    if (isEnabled) {
+                      classList.add(DARK_MODE_CLASS);
+                    } else {
+                      classList.remove(DARK_MODE_CLASS);
+                    }
+                  }
+              </script>
+            <script type="module" src="/resources/6nexk/login/keycloak.v2/js/passwordVisibility.js"></script>
+            <script type="module">
+                import { startSessionPolling } from "/resources/6nexk/login/keycloak.v2/js/authChecker.js";
+
+                startSessionPolling(
+                    "/realms/corg/login-actions/restart?client_id=corgweb&tab_id=FUp7EyGZTSs&client_data=eyJydSI6Imh0dHBzOi8vbG9jYWxob3N0OjMwMDAvYXV0aC9jYWxsYmFjayIsInJ0IjoiY29kZSIsInN0IjoiVGFraVN0YXRlWmVIZWoifQ&skip_logout=true"
+                );
+            </script>
+                <script type="module">
+                    import { checkAuthSession } from "/resources/6nexk/login/keycloak.v2/js/authChecker.js";
+
+                    checkAuthSession(
+                        "A6VurdFc2gifioLL/fjnNCnRbvEUMWPBSWJYb/b9Meo"
+                    );
+                </script>
+            <script>
+              // Workaround for https://bugzilla.mozilla.org/show_bug.cgi?id=1404468
+              const isFirefox = true;
+            </script>
+        </head>
+
+        <body id="keycloak-bg" class="">
+        <div class="pf-v5-c-login">
+          <div class="pf-v5-c-login__container">
+            <header id="kc-header" class="pf-v5-c-login__header">
+              <div id="kc-header-wrapper"
+                      class="pf-v5-c-brand">corg</div>
+            </header>
+            <main class="pf-v5-c-login__main">
+              <div class="pf-v5-c-login__main-header">
+                <h1 class="pf-v5-c-title pf-m-3xl" id="kc-page-title">
+                  <!-- template: register.ftl -->
+
+                    Register
+                </h1>
+              </div>
+              <div class="pf-v5-c-login__main-body">
+                        <div class="pf-v5-u-mb-md-on-md">
+                            <div class=" subtitle">
+                                <span class="pf-v5-c-helper-text__item-text">
+                                  <span class="pf-v5-c-form__label-required">*</span> Required fields
+                                </span>
+                            </div>
+                        </div>
+
+
+        <!-- template: register.ftl -->
+
+                <form id="kc-register-form" class="pf-v5-c-form" action="http://localhost:8091/realms/corg/login-actions/registration?session_code=ydHXtwxYO1CQ6UAiW3I_n_g4moomaN6wwpc26HhnbMo&amp;execution=3f8fd44c-de15-40b3-a20d-d298b32ae6ed&amp;client_id=corgweb&amp;tab_id=FUp7EyGZTSs&amp;client_data=eyJydSI6Imh0dHBzOi8vbG9jYWxob3N0OjMwMDAvYXV0aC9jYWxsYmFjayIsInJ0IjoiY29kZSIsInN0IjoiVGFraVN0YXRlWmVIZWoifQ" method="post" novalidate="novalidate">
+          
+
+
+
+
+        <div class="pf-v5-c-form__group">
+            <div class="pf-v5-c-form__label">
+                <label for="username" class="pf-v5-c-form__label">
+                <span class="pf-v5-c-form__label-text">
+                    Username
+                </span>
+                        <span class="pf-v5-c-form__label-required" aria-hidden="true">&#42;</span>
+                </label>
+            </div>
+
+              <div class="">
+          <span class="pf-v5-c-form-control ">
+            <input type="text" id="username" name="username" value="phawk@dshr.33mail.com" class="pf-v5-c-form-control"
+              aria-invalid=""
+              
+              autocomplete="username"
+              
+              
+              
+              
+              
+              
+              
+              
+            />
+          </span>
+              </div>
+
+            <div id="input-error-container-username">
+            </div>
+        </div>
+
+
+        <div class="pf-v5-c-form__group">
+            <div class="pf-v5-c-form__label">
+                <label for="password" class="pf-v5-c-form__label">
+                <span class="pf-v5-c-form__label-text">
+                    Password
+                </span>
+                        <span class="pf-v5-c-form__label-required" aria-hidden="true">&#42;</span>
+                </label>
+            </div>
+
+            <div class="pf-v5-c-input-group">
+              <div class="pf-v5-c-input-group__item pf-m-fill">
+                <span class="pf-v5-c-form-control ">
+                  <input id="password" name="password" value="" type="password" autocomplete="new-password" 
+                          aria-invalid=""/>
+                </span>
+              </div>
+              <div class="pf-v5-c-input-group__item">
+                <button class="pf-v5-c-button pf-m-control" type="button" aria-label="Show password"
+                        aria-controls="password" data-password-toggle
+                        data-icon-show="fa-eye fas" data-icon-hide="fa-eye-slash fas"
+                        data-label-show="Show password" data-label-hide="Hide password">
+                    <i class="fa-eye fas" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
+
+            <div id="input-error-container-password">
+            </div>
+        </div>
+
+
+        <div class="pf-v5-c-form__group">
+            <div class="pf-v5-c-form__label">
+                <label for="password-confirm" class="pf-v5-c-form__label">
+                <span class="pf-v5-c-form__label-text">
+                    Confirm password
+                </span>
+                        <span class="pf-v5-c-form__label-required" aria-hidden="true">&#42;</span>
+                </label>
+            </div>
+
+            <div class="pf-v5-c-input-group">
+              <div class="pf-v5-c-input-group__item pf-m-fill">
+                <span class="pf-v5-c-form-control ">
+                  <input id="password-confirm" name="password-confirm" value="" type="password" autocomplete="new-password" 
+                          aria-invalid=""/>
+                </span>
+              </div>
+              <div class="pf-v5-c-input-group__item">
+                <button class="pf-v5-c-button pf-m-control" type="button" aria-label="Show password"
+                        aria-controls="password-confirm" data-password-toggle
+                        data-icon-show="fa-eye fas" data-icon-hide="fa-eye-slash fas"
+                        data-label-show="Show password" data-label-hide="Hide password">
+                    <i class="fa-eye fas" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
+
+            <div id="input-error-container-password-confirm">
+            </div>
+        </div>
+
+
+
+
+
+        <div class="pf-v5-c-form__group">
+            <div class="pf-v5-c-form__label">
+                <label for="email" class="pf-v5-c-form__label">
+                <span class="pf-v5-c-form__label-text">
+                    Email
+                </span>
+                        <span class="pf-v5-c-form__label-required" aria-hidden="true">&#42;</span>
+                </label>
+            </div>
+
+              <div class="">
+          <span class="pf-v5-c-form-control ">
+            <input type="text" id="email" name="email" value="" class="pf-v5-c-form-control"
+              aria-invalid=""
+              
+              autocomplete="email"
+              
+              
+              
+              
+              
+              
+              
+              
+            />
+          </span>
+              </div>
+
+            <div id="input-error-container-email">
+            </div>
+        </div>
+
+
+
+
+
+        <div class="pf-v5-c-form__group">
+            <div class="pf-v5-c-form__label">
+                <label for="firstName" class="pf-v5-c-form__label">
+                <span class="pf-v5-c-form__label-text">
+                    First name
+                </span>
+                        <span class="pf-v5-c-form__label-required" aria-hidden="true">&#42;</span>
+                </label>
+            </div>
+
+              <div class="">
+          <span class="pf-v5-c-form-control ">
+            <input type="text" id="firstName" name="firstName" value="" class="pf-v5-c-form-control"
+              aria-invalid=""
+              
+              
+              
+              
+              
+              
+              
+              
+              
+              
+            />
+          </span>
+              </div>
+
+            <div id="input-error-container-firstName">
+            </div>
+        </div>
+
+
+
+
+
+        <div class="pf-v5-c-form__group">
+            <div class="pf-v5-c-form__label">
+                <label for="lastName" class="pf-v5-c-form__label">
+                <span class="pf-v5-c-form__label-text">
+                    Last name
+                </span>
+                        <span class="pf-v5-c-form__label-required" aria-hidden="true">&#42;</span>
+                </label>
+            </div>
+
+              <div class="">
+          <span class="pf-v5-c-form-control ">
+            <input type="text" id="lastName" name="lastName" value="" class="pf-v5-c-form-control"
+              aria-invalid=""
+              
+              
+              
+              
+              
+              
+              
+              
+              
+              
+            />
+          </span>
+              </div>
+
+            <div id="input-error-container-lastName">
+            </div>
+        </div>
+
+
+                <div class="pf-v5-c-form__group"
+                >
+
+                  <div class="pf-v5-u-mb-md-on-md">
+                    <label id="header-consents" class="">consents</label>
+                  </div>
+
+                </div>
+
+
+
+        <div class="pf-v5-c-form__group">
+            <div class="pf-v5-c-form__label">
+                <label for="age_declaration" class="pf-v5-c-form__label">
+                <span class="pf-v5-c-form__label-text">
+                    I&#39;m over 18
+                </span>
+                        <span class="pf-v5-c-form__label-required" aria-hidden="true">&#42;</span>
+                </label>
+            </div>
+
+              <div class="">
+          
+
+                <div class="">
+                    <input type="radio" id="age_declaration-yes" name="age_declaration" value="yes" class=""
+                        aria-invalid=""
+                        
+                        
+                    />
+                    <label for="age_declaration-yes" class="">yes</label>
+                </div>
+                <div class="">
+                    <input type="radio" id="age_declaration-no" name="age_declaration" value="no" class=""
+                        aria-invalid=""
+                        
+                        
+                    />
+                    <label for="age_declaration-no" class="">no</label>
+                </div>
+              </div>
+
+            <div id="input-error-container-age_declaration">
+            </div>
+        </div>
+
+
+
+                <div class="form-group">
+                    <div class="">
+                        Terms and Conditions
+                        <div id="kc-registration-terms-text">
+                            <p>Terms and conditions to be defined</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="">
+                        <input type="checkbox" id="termsAccepted" name="termsAccepted" class="pf-v5-c-check__input"
+                              aria-invalid=""
+                        />
+                        <label for="termsAccepted" class="pf-v5-c-form__label">I agree to the terms and conditions</label>
+                    </div>
+                </div>
+
+
+                        <div id="kc-form-buttons" class="">
+                            <input class="pf-v5-c-button pf-v5-c-button pf-m-primary pf-m-block " type="submit" value="Register"/>
+                        </div>
+
+                    <div class="pf-v5-c-form__group pf-v5-c-login__main-footer-band">
+                        <div id="kc-form-options" class=" pf-v5-c-login__main-footer-band-item">
+                            <div class="">
+                                <span><a href="/realms/corg/login-actions/authenticate?client_id=corgweb&amp;tab_id=FUp7EyGZTSs&amp;client_data=eyJydSI6Imh0dHBzOi8vbG9jYWxob3N0OjMwMDAvYXV0aC9jYWxsYmFjayIsInJ0IjoiY29kZSIsInN0IjoiVGFraVN0YXRlWmVIZWoifQ">« Back to Login</a></span>
+                            </div>
+                        </div>
+                    </div>
+
+                </form>
+
+            <template id="errorTemplate">
+                <div class="pf-v5-c-form__helper-text" aria-live="polite">
+                    <div class="pf-v5-c-helper-text">
+                        <div class="pf-v5-c-helper-text__item pf-m-error">
+                            <ul class="pf-v5-c-helper-text__item-text pf-m-error kc-feedback-text">
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </template>
+            <template id="errorItemTemplate">
+                <li></li>
+            </template>
+            <script type="module">
+                import { validatePassword } from "/resources/6nexk/login/keycloak.v2/js/password-policy.js";
+
+                const activePolicies = [
+                    { name: "length", policy: { value: -1, error: "Invalid password: minimum length {0}."} },
+                    { name: "maxLength", policy: { value: -1, error: "Invalid password: maximum length {0}."} },
+                    { name: "lowerCase", policy: { value: -1, error: "Invalid password: must contain at least {0} lower case characters."} },
+                    { name: "upperCase", policy: { value: -1, error: "Invalid password: must contain at least {0} upper case characters."} },
+                    { name: "digits", policy: { value: -1, error: "Invalid password: must contain at least {0} numerical digits."} },
+                    { name: "specialChars", policy: { value: -1, error: "Invalid password: must contain at least {0} special characters."} }
+                ].filter(p => p.policy.value !== -1);
+
+                document.getElementById("password").addEventListener("change", (event) => {
+
+                    const errorContainer = document.getElementById("input-error-container-password");
+                    const template = document.querySelector("#errorTemplate").content.cloneNode(true);
+                    const errors = validatePassword(event.target.value, activePolicies);
+
+                    if (errors.length === 0) {
+                        errorContainer.replaceChildren();
+                        return;
+                    }
+
+                    const errorList = template.querySelector("ul");
+                    const htmlErrors = errors.forEach((e) => {
+                        const row = document.querySelector("#errorItemTemplate").content.cloneNode(true);
+                        const li = row.querySelector("li");
+                        li.textContent = e;
+                        errorList.appendChild(li);
+                    });
+                    errorContainer.replaceChildren(template);
+                });
+            </script>
+
+
+              </div>
+              <div class="pf-v5-c-login__main-footer">
+        <!-- template: register.ftl -->
+
+              </div>
+            </main>
+
+          </div>
+        </div>
+        </body>
+        </html>
+    SuccessfulAuthenticationResponse:
+      summary: 'Successful Authentication Response'
+      value: |
+        https://black-pearl.com/post-auth?
+        state=TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQ
+        &session_state=485a7437-eec0-430b-b65d-b1546c6cd4bc
+        &iss=http%3A%2F%2Flocalhost%3A8091%2Frealms%2Fcorg
+        &code=25c58f0d-f523-4e05-ba5e-38f67ca079ac.485a7437-eec0-430b-b65d-b1546c6cd4bc.d58eb1dc-37de-4438-8651-d349ebf2d9a4
+    AuthenticationErrorResponse.InvalidRequest:
+      summary: 'Authentication Error Response (Invalid Request)'
+      value: |
+        https://black-pearl.com/post-auth?
+        error=invalid_request
+        &error_description=Missing+parameter%3A+response_type
+        &state=TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQ
+        &iss=http%3A%2F%2Flocalhost%3A8091%2Frealms%2Fcorg
+    AuthenticationErrorResponse.LoginRequired:
+      summary: 'Authentication Error Response (Login Required)'
+      value: |
+        https://black-pearl.com/post-auth?
+        error=login_required
+        &state=TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQ
+        &iss=http%3A%2F%2Flocalhost%3A8091%2Frealms%2Fcorg
+    ErrorPage.PageNotFound:
+      summary: 'Error Page (Page Not Found)'
+      value: |
+        <!DOCTYPE html>
+        <html class="login-pf" lang="en">
+
+        <head>
+            <meta charset="utf-8">
+            <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+            <meta name="robots" content="noindex, nofollow">
+            <meta name="color-scheme" content="light dark">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+
+            <title>Sign in to Keycloak</title>
+            <link rel="icon" href="/resources/6nexk/login/keycloak.v2/img/favicon.ico" />
+                    <link href="/resources/6nexk/common/keycloak/vendor/patternfly-v5/patternfly.min.css" rel="stylesheet" />
+                    <link href="/resources/6nexk/common/keycloak/vendor/patternfly-v5/patternfly-addons.css" rel="stylesheet" />
+                    <link href="/resources/6nexk/login/keycloak.v2/css/styles.css" rel="stylesheet" />
+            <script type="importmap">
+                {
+                    "imports": {
+                        "rfc4648": "/resources/6nexk/common/keycloak/vendor/rfc4648/rfc4648.js"
+                    }
+                }
+            </script>
+              <script type="module" async blocking="render">
+                  const DARK_MODE_CLASS = "pf-v5-theme-dark";
+                  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+                  updateDarkMode(mediaQuery.matches);
+                  mediaQuery.addEventListener("change", (event) => updateDarkMode(event.matches));
+
+                  function updateDarkMode(isEnabled) {
+                    const { classList } = document.documentElement;
+
+                    if (isEnabled) {
+                      classList.add(DARK_MODE_CLASS);
+                    } else {
+                      classList.remove(DARK_MODE_CLASS);
+                    }
+                  }
+              </script>
+            <script type="module" src="/resources/6nexk/login/keycloak.v2/js/passwordVisibility.js"></script>
+            <script type="module">
+                import { startSessionPolling } from "/resources/6nexk/login/keycloak.v2/js/authChecker.js";
+
+                startSessionPolling(
+                    "http://localhost:8091/realms/master/login-actions/restart?skip_logout=true"
+                );
+            </script>
+            <script>
+              // Workaround for https://bugzilla.mozilla.org/show_bug.cgi?id=1404468
+              const isFirefox = true;
+            </script>
+        </head>
+
+        <body id="keycloak-bg" class="">
+        <div class="pf-v5-c-login">
+          <div class="pf-v5-c-login__container">
+            <header id="kc-header" class="pf-v5-c-login__header">
+              <div id="kc-header-wrapper"
+                      class="pf-v5-c-brand"><div class="kc-logo-text"><span>Keycloak</span></div></div>
+            </header>
+            <main class="pf-v5-c-login__main">
+              <div class="pf-v5-c-login__main-header">
+                <h1 class="pf-v5-c-title pf-m-3xl" id="kc-page-title">        We are sorry...
+        </h1>
+              </div>
+              <div class="pf-v5-c-login__main-body">
+
+
+                <div id="kc-error-message">
+                    <p class="instruction">Page not found</p>
+                </div>
+
+
+              </div>
+              <div class="pf-v5-c-login__main-footer">
+              </div>
+            </main>
+
+          </div>
+        </div>
+        </body>
+        </html>
+    ErrorPage.ClientNotFound:
+      summary: 'Error Page (Client Not Found)'
+      value: |
+        <!DOCTYPE html>
+        <html class="login-pf" lang="en">
+
+        <head>
+            <meta charset="utf-8">
+            <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+            <meta name="robots" content="noindex, nofollow">
+            <meta name="color-scheme" content="light dark">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+
+            <title>Sign in to Black Pearl</title>
+            <link rel="icon" href="/resources/6nexk/login/keycloak.v2/img/favicon.ico" />
+                    <link href="/resources/6nexk/common/keycloak/vendor/patternfly-v5/patternfly.min.css" rel="stylesheet" />
+                    <link href="/resources/6nexk/common/keycloak/vendor/patternfly-v5/patternfly-addons.css" rel="stylesheet" />
+                    <link href="/resources/6nexk/login/keycloak.v2/css/styles.css" rel="stylesheet" />
+            <script type="importmap">
+                {
+                    "imports": {
+                        "rfc4648": "/resources/6nexk/common/keycloak/vendor/rfc4648/rfc4648.js"
+                    }
+                }
+            </script>
+              <script type="module" async blocking="render">
+                  const DARK_MODE_CLASS = "pf-v5-theme-dark";
+                  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+                  updateDarkMode(mediaQuery.matches);
+                  mediaQuery.addEventListener("change", (event) => updateDarkMode(event.matches));
+
+                  function updateDarkMode(isEnabled) {
+                    const { classList } = document.documentElement;
+
+                    if (isEnabled) {
+                      classList.add(DARK_MODE_CLASS);
+                    } else {
+                      classList.remove(DARK_MODE_CLASS);
+                    }
+                  }
+              </script>
+            <script type="module" src="/resources/6nexk/login/keycloak.v2/js/passwordVisibility.js"></script>
+            <script type="module">
+                import { startSessionPolling } from "/resources/6nexk/login/keycloak.v2/js/authChecker.js";
+
+                startSessionPolling(
+                    "/realms/black-pearl/login-actions/restart?skip_logout=true"
+                );
+            </script>
+            <script>
+              // Workaround for https://bugzilla.mozilla.org/show_bug.cgi?id=1404468
+              const isFirefox = true;
+            </script>
+        </head>
+
+        <body id="keycloak-bg" class="">
+        <div class="pf-v5-c-login">
+          <div class="pf-v5-c-login__container">
+            <header id="kc-header" class="pf-v5-c-login__header">
+              <div id="kc-header-wrapper"
+                      class="pf-v5-c-brand">black-pearl</div>
+            </header>
+            <main class="pf-v5-c-login__main">
+              <div class="pf-v5-c-login__main-header">
+                <h1 class="pf-v5-c-title pf-m-3xl" id="kc-page-title">        We are sorry...
+        </h1>
+              </div>
+              <div class="pf-v5-c-login__main-body">
+
+
+                <div id="kc-error-message">
+                    <p class="instruction">Client not found.</p>
+                </div>
+
+
+              </div>
+              <div class="pf-v5-c-login__main-footer">
+              </div>
+            </main>
+
+          </div>
+        </div>
+        </body>
+        </html>
+    ErrorPage.InvalidParameter:
+      summary: 'Error Page (Invalid Parameter)'
+      value: |
+        <!DOCTYPE html>
+        <html class="login-pf" lang="en">
+
+        <head>
+            <meta charset="utf-8">
+            <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+            <meta name="robots" content="noindex, nofollow">
+            <meta name="color-scheme" content="light dark">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+
+            <title>Sign in to Black Pearl</title>
+            <link rel="icon" href="/resources/6nexk/login/keycloak.v2/img/favicon.ico" />
+                    <link href="/resources/6nexk/common/keycloak/vendor/patternfly-v5/patternfly.min.css" rel="stylesheet" />
+                    <link href="/resources/6nexk/common/keycloak/vendor/patternfly-v5/patternfly-addons.css" rel="stylesheet" />
+                    <link href="/resources/6nexk/login/keycloak.v2/css/styles.css" rel="stylesheet" />
+            <script type="importmap">
+                {
+                    "imports": {
+                        "rfc4648": "/resources/6nexk/common/keycloak/vendor/rfc4648/rfc4648.js"
+                    }
+                }
+            </script>
+              <script type="module" async blocking="render">
+                  const DARK_MODE_CLASS = "pf-v5-theme-dark";
+                  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+                  updateDarkMode(mediaQuery.matches);
+                  mediaQuery.addEventListener("change", (event) => updateDarkMode(event.matches));
+
+                  function updateDarkMode(isEnabled) {
+                    const { classList } = document.documentElement;
+
+                    if (isEnabled) {
+                      classList.add(DARK_MODE_CLASS);
+                    } else {
+                      classList.remove(DARK_MODE_CLASS);
+                    }
+                  }
+              </script>
+            <script type="module" src="/resources/6nexk/login/keycloak.v2/js/passwordVisibility.js"></script>
+            <script type="module">
+                import { startSessionPolling } from "/resources/6nexk/login/keycloak.v2/js/authChecker.js";
+
+                startSessionPolling(
+                    "/realms/pirates-of-the-caribbean/login-actions/restart?client_id=black-pearl&skip_logout=true"
+                );
+            </script>
+            <script>
+              // Workaround for https://bugzilla.mozilla.org/show_bug.cgi?id=1404468
+              const isFirefox = true;
+            </script>
+        </head>
+
+        <body id="keycloak-bg" class="">
+        <div class="pf-v5-c-login">
+          <div class="pf-v5-c-login__container">
+            <header id="kc-header" class="pf-v5-c-login__header">
+              <div id="kc-header-wrapper"
+                      class="pf-v5-c-brand">corg</div>
+            </header>
+            <main class="pf-v5-c-login__main">
+              <div class="pf-v5-c-login__main-header">
+                <h1 class="pf-v5-c-title pf-m-3xl" id="kc-page-title">        We are sorry...
+        </h1>
+              </div>
+              <div class="pf-v5-c-login__main-body">
+
+
+                <div id="kc-error-message">
+                    <p class="instruction">Invalid parameter: redirect_uri</p>
+                </div>
+
+
+              </div>
+              <div class="pf-v5-c-login__main-footer">
+              </div>
+            </main>
+
+          </div>
+        </div>
+        </body>
+        </html>
+
+    # token request examples
+    TokenRequest.JackSparrow:
+      summary: 'Token Request - Jack Sparrow (Black Pearl)'
+      value:
+        grant_type: 'authorization_code'
+        client_id: 'black-pearl'
+        client_secret: 'euVXfNksq43R0XtE1NSMeSlzqK00tHgx'
+        code: '79785abc-0ffe-4537-9f3f-cf19e3b0aa5b.def28079-6956-4ca3-bab7-c99cc1db5938.d58eb1dc-37de-4438-8651-d349ebf2d9a4'
+        redirect_uri: 'https://black-pearl.com/post-auth'
+    TokenRequest.JamesNorrington:
+      summary: 'Token Request - James Norrington (HMS Interceptor)'
+      value:
+        grant_type: 'authorization_code'
+        client_id: 'hms-interceptor'
+        client_secret: 'dtWTY1IUtc8DwlvjbOzDN0hdA5hx4FIP'
+        code: '9688bb8d-3946-4acc-bfac-f5c4b00b6de1.f4efecc6-e2f9-4806-a974-c32911b80db6.d58eb1dc-37de-4438-8651-d349ebf2d9a4'
+        redirect_uri: 'https://hms-interceptor.uk/auth/callback'
+
+    # refresh request examples
+    RefreshRequest.JackSparrow:
+      summary: 'Refresh Request - Jack Sparrow (Black Pearl)'
+      value:
+        grant_type: 'refresh_token'
+        client_id: 'black-pearl'
+        client_secret: 'euVXfNksq43R0XtE1NSMeSlzqK00tHgx'
+        refresh_token: 'eyJhbGciOiJIUzUxMiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJkNDY0Y2VhYS03NzBjLTQ2MWMtYTQyOC02NTdlMWM3M2Q0ZmUifQ.eyJleHAiOjE3NDc4MTM4MDEsImlhdCI6MTc0NzgxMjAwMSwianRpIjoiMDliMmM2ODYtM2NhMC00ZDk3LWIyYTEtZGI3YmY3Mjc3OGU0IiwiaXNzIjoiaHR0cDovL2xvY2FsaG9zdDo4MDkxL3JlYWxtcy9jb3JnIiwiYXVkIjoiaHR0cDovL2xvY2FsaG9zdDo4MDkxL3JlYWxtcy9jb3JnIiwic3ViIjoiMjIwNzc5YmEtZjE4YS00MWU3LWEyMWMtODFhYjlhNjA3MzZhIiwidHlwIjoiUmVmcmVzaCIsImF6cCI6ImNvcmd3ZWIiLCJzaWQiOiJkZWYyODA3OS02OTU2LTRjYTMtYmFiNy1jOTljYzFkYjU5MzgiLCJzY29wZSI6Im9wZW5pZCBlbWFpbCBiYXNpYyBhZ2VfZGVjbGFyYXRpb24gYWNyIHdlYi1vcmlnaW5zIHJvbGVzIHByb2ZpbGUifQ.sB5P2NEDrsPkTuxMw0eAYDS8EVfDlIxCZrHC962-lXQuj7CpLp57U2qPsj5ldZ9BQpPvebsFneKr3momR9FmqA'
+    RefreshRequest.JamesNorrington:
+      summary: 'Refresh Request - James Norrington (HMS Interceptor)'
+      value:
+        grant_type: 'refresh_token'
+        client_id: 'hms-interceptor'
+        client_secret: 'dtWTY1IUtc8DwlvjbOzDN0hdA5hx4FIP'
+        refresh_token: 'eyJhbGciOiJIUzUxMiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJkNDY0Y2VhYS03NzBjLTQ2MWMtYTQyOC02NTdlMWM3M2Q0ZmUifQ.eyJleHAiOjE3NDc4MTM4MDEsImlhdCI6MTc0NzgxMjAwMSwianRpIjoiMDliMmM2ODYtM2NhMC00ZDk3LWIyYTEtZGI3YmY3Mjc3OGU0IiwiaXNzIjoiaHR0cDovL2xvY2FsaG9zdDo4MDkxL3JlYWxtcy9jb3JnIiwiYXVkIjoiaHR0cDovL2xvY2FsaG9zdDo4MDkxL3JlYWxtcy9jb3JnIiwic3ViIjoiMjIwNzc5YmEtZjE4YS00MWU3LWEyMWMtODFhYjlhNjA3MzZhIiwidHlwIjoiUmVmcmVzaCIsImF6cCI6ImNvcmd3ZWIiLCJzaWQiOiJkZWYyODA3OS02OTU2LTRjYTMtYmFiNy1jOTljYzFkYjU5MzgiLCJzY29wZSI6Im9wZW5pZCBlbWFpbCBiYXNpYyBhZ2VfZGVjbGFyYXRpb24gYWNyIHdlYi1vcmlnaW5zIHJvbGVzIHByb2ZpbGUifQ.sB5P2NEDrsPkTuxMw0eAYDS8EVfDlIxCZrHC962-lXQuj7CpLp57U2qPsj5ldZ9BQpPvebsFneKr3momR9FmqA'
+
+    # token response examples
+    SuccessfulTokenResponse.JackSparrow:
+      summary: 'Jack Sparrow (Black Pearl)'
+      value:
+        access_token: 'eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJIYzRmb3huMzRxLXlSRTNPdFdtaVNta0hTYVc4YUgwUnVKNDdpYzNNUmIwIn0.eyJleHAiOjE3NDc4MTA3MTgsImlhdCI6MTc0NzgxMDQxOCwiYXV0aF90aW1lIjoxNzQ3ODEwMTc5LCJqdGkiOiJjYjkwZTVkZi04NjMxLTRjZWYtYjkyNy0xYzA5MTY0NGFjNmYiLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwOTEvcmVhbG1zL2NvcmciLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiMjIwNzc5YmEtZjE4YS00MWU3LWEyMWMtODFhYjlhNjA3MzZhIiwidHlwIjoiQmVhcmVyIiwiYXpwIjoiY29yZ3dlYiIsInNpZCI6ImRlZjI4MDc5LTY5NTYtNGNhMy1iYWI3LWM5OWNjMWRiNTkzOCIsImFjciI6IjAiLCJhbGxvd2VkLW9yaWdpbnMiOlsiaHR0cDovL2xvY2FsaG9zdDozMDAwIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXRob3JpemF0aW9uIiwiZGVmYXVsdC1yb2xlcy1jb3JnIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJvcGVuaWQgZW1haWwgcHJvZmlsZSIsInRlcm1zX2FuZF9jb25kaXRpb25zIjoxNzQ1MzA4NzUxLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwibmFtZSI6IlBldGVyIEhhd2siLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJwaGF3ayIsImdpdmVuX25hbWUiOiJQZXRlciIsImZhbWlseV9uYW1lIjoiSGF3ayIsImVtYWlsIjoicGhhd2tAZHNoci4zM21haWwuY29tIn0.L9sbFiOkRkulARmI1oh01TPt8TkaF0hF69lutJkNR8Dn_bH7RYw0oZ99TwqwtqYmldl3DWV2leukbQwbW_GIfOu2ZaR8k7G7wdnbdSD1LZBtO8daDtXzK0-P2tF2_PMZQZ-jr7Hq_RfyPBv0d5Ncu8MABaBgPh2BKAb_IfqzymfYbSUfI8LaO4p_UvxaXf6fBoCN2AzW7HUzapHpcyTHDRW20un6Vs025orPbzawgx9bY0ZjjVosbSkgoF-p3bcD62q29qkE04i1MkUUsf-79rtQRITut5FhzVuzBAopmRCKVlVoJqKVNic5NKBLlCHLvHe-cXIQbK717lDA_taH1w'
+        token_type: 'Bearer'
+        expires_in: 300
+        refresh_token: 'eyJhbGciOiJIUzUxMiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJkNDY0Y2VhYS03NzBjLTQ2MWMtYTQyOC02NTdlMWM3M2Q0ZmUifQ.eyJleHAiOjE3NDc4MTM4MDEsImlhdCI6MTc0NzgxMjAwMSwianRpIjoiMDliMmM2ODYtM2NhMC00ZDk3LWIyYTEtZGI3YmY3Mjc3OGU0IiwiaXNzIjoiaHR0cDovL2xvY2FsaG9zdDo4MDkxL3JlYWxtcy9jb3JnIiwiYXVkIjoiaHR0cDovL2xvY2FsaG9zdDo4MDkxL3JlYWxtcy9jb3JnIiwic3ViIjoiMjIwNzc5YmEtZjE4YS00MWU3LWEyMWMtODFhYjlhNjA3MzZhIiwidHlwIjoiUmVmcmVzaCIsImF6cCI6ImNvcmd3ZWIiLCJzaWQiOiJkZWYyODA3OS02OTU2LTRjYTMtYmFiNy1jOTljYzFkYjU5MzgiLCJzY29wZSI6Im9wZW5pZCBlbWFpbCBiYXNpYyBhZ2VfZGVjbGFyYXRpb24gYWNyIHdlYi1vcmlnaW5zIHJvbGVzIHByb2ZpbGUifQ.sB5P2NEDrsPkTuxMw0eAYDS8EVfDlIxCZrHC962-lXQuj7CpLp57U2qPsj5ldZ9BQpPvebsFneKr3momR9FmqA'
+        id_token: 'eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJIYzRmb3huMzRxLXlSRTNPdFdtaVNta0hTYVc4YUgwUnVKNDdpYzNNUmIwIn0.eyJleHAiOjE3NDc4MTIzMDEsImlhdCI6MTc0NzgxMjAwMSwiYXV0aF90aW1lIjoxNzQ3ODEwMTc5LCJqdGkiOiJmNjNhOGJiZS0wMjMwLTRkZjYtODI4Yi03MDZkNjMzY2JmM2IiLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwOTEvcmVhbG1zL2NvcmciLCJhdWQiOiJjb3Jnd2ViIiwic3ViIjoiMjIwNzc5YmEtZjE4YS00MWU3LWEyMWMtODFhYjlhNjA3MzZhIiwidHlwIjoiSUQiLCJhenAiOiJjb3Jnd2ViIiwic2lkIjoiZGVmMjgwNzktNjk1Ni00Y2EzLWJhYjctYzk5Y2MxZGI1OTM4IiwiYXRfaGFzaCI6ImFzXzRUWllERHpNcjNXT29CeGFSQWciLCJhY3IiOiIwIiwidGVybXNfYW5kX2NvbmRpdGlvbnMiOjE3NDUzMDg3NTEsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoiUGV0ZXIgSGF3ayIsInByZWZlcnJlZF91c2VybmFtZSI6InBoYXdrIiwiZ2l2ZW5fbmFtZSI6IlBldGVyIiwiZmFtaWx5X25hbWUiOiJIYXdrIiwiYWdlX2RlY2xhcmF0aW9uIjoieWVzIiwiZW1haWwiOiJwaGF3a0Bkc2hyLjMzbWFpbC5jb20ifQ.NcuaEXC0rrKeqOCb6p-OKTkD3vC7tAfkgXGBdVWX45-bQ9peMv_Dm1OZ75I0Es6i512wzdykq4GfHjLJCd0B1D53vGDLBMY03I-Nzw9or86gbbIw5J-MaTTgSmr9HqBVeYn7h5FJZiV-ilG9l8rQuowhZ5jLyo26kbkyqwlLueblMDofTytIBjF-r6gVTQFd5KGirpiN8dv7atI7b1pPocAhrDJC9b7QPmbqq5-usImrDL_qEPS7pr-V4X_j0h7vQzvYvZ2pnhL1jeGPaFpaS6V-TBMFzMyt_JMcj5OsBZ_ZuMjvncWfWxxOH9V35akm6773XeXj2qBiHVZ4EnErlA'
+    SuccessfulTokenResponse.JamesNorrington:
+      summary: 'James Norrington (HMS Interceptor)'
+      value:
+        access_token: 'eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJIYzRmb3huMzRxLXlSRTNPdFdtaVNta0hTYVc4YUgwUnVKNDdpYzNNUmIwIn0.eyJleHAiOjE3NDg1MDk3MzUsImlhdCI6MTc0ODUwOTQzNSwiYXV0aF90aW1lIjoxNzQ4NTA5NDIxLCJqdGkiOiJhMTZhM2Q0My0wOTgzLTRhMmMtOGU4Mi1lYTUzNjIwODBiOGEiLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwOTEvcmVhbG1zL2NvcmciLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiMjIwNzc5YmEtZjE4YS00MWU3LWEyMWMtODFhYjlhNjA3MzZhIiwidHlwIjoiQmVhcmVyIiwiYXpwIjoiY29yZ3dlYiIsInNpZCI6IjQyMjE0N2UxLWU4MTAtNDA5Yy04OTE2LTEwMmUzNjlkN2ZkYyIsImFjciI6IjEiLCJhbGxvd2VkLW9yaWdpbnMiOlsiaHR0cDovL2xvY2FsaG9zdDozMDAwIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXRob3JpemF0aW9uIiwiZGVmYXVsdC1yb2xlcy1jb3JnIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJvcGVuaWQgZW1haWwgYWRkcmVzcyBwcm9maWxlIiwidGVybXNfYW5kX2NvbmRpdGlvbnMiOjE3NDUzMDg3NTEsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJhZGRyZXNzIjp7fSwibmFtZSI6IlBldGVyIEhhd2siLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJwaGF3ayIsImdpdmVuX25hbWUiOiJQZXRlciIsImZhbWlseV9uYW1lIjoiSGF3ayIsImVtYWlsIjoicGhhd2tAZHNoci4zM21haWwuY29tIn0.PoHc1vh030_dfuogqIYMJq6-ZDEsorb1ERcC8IApEcVtQ3DTIrml8lNEcIqJRK5vn1Fsprvoe9YlNeIHfKB6Evoh3kRVp0PyIndp60IS6CJRwfotlMbNMVAZ4LIpUaRcmuciXscyHmVeud38Fk1PlbXkdo-fRli-1FmRWDqXlM_kbRjyVvMHrAsgC6_Zmkafpe7uym7UYrr83ka2aw9cO9LFEmk8qKBMnGgNXyqgqbRDNn5p-_vnRfC7QJnels_prcrro2CJr_Iuy7_noZf-xtEi_YnbeXUZ4x9i5pPjQlVM9Y-eiZpa0jrJcBadiIvcpFYudXtiWWWbK306GpMVyQ'
+        token_type: 'Bearer'
+        expires_in: 300
+        refresh_token: 'eyJhbGciOiJIUzUxMiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJkNDY0Y2VhYS03NzBjLTQ2MWMtYTQyOC02NTdlMWM3M2Q0ZmUifQ.eyJleHAiOjE3NDg1MTEyMzUsImlhdCI6MTc0ODUwOTQzNSwianRpIjoiZGVlOTA0ZTItMWQ3OS00OGVmLWI2Y2YtNTRiOGZmOWZkNzQxIiwiaXNzIjoiaHR0cDovL2xvY2FsaG9zdDo4MDkxL3JlYWxtcy9jb3JnIiwiYXVkIjoiaHR0cDovL2xvY2FsaG9zdDo4MDkxL3JlYWxtcy9jb3JnIiwic3ViIjoiMjIwNzc5YmEtZjE4YS00MWU3LWEyMWMtODFhYjlhNjA3MzZhIiwidHlwIjoiUmVmcmVzaCIsImF6cCI6ImNvcmd3ZWIiLCJzaWQiOiI0MjIxNDdlMS1lODEwLTQwOWMtODkxNi0xMDJlMzY5ZDdmZGMiLCJzY29wZSI6Im9wZW5pZCBlbWFpbCBiYXNpYyBhZ2VfZGVjbGFyYXRpb24gYWNyIHdlYi1vcmlnaW5zIGFkZHJlc3Mgcm9sZXMgcHJvZmlsZSJ9.81J4LuYiQYC4331hn3gGhogpbBWGwT_bYPMdJA8yte-LYB6ShmHfeUSCpedzIpxrsXcJ-vGubB9F55-YhA0y0A'
+        id_token: 'eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJIYzRmb3huMzRxLXlSRTNPdFdtaVNta0hTYVc4YUgwUnVKNDdpYzNNUmIwIn0.eyJleHAiOjE3NDg1MDk3MzUsImlhdCI6MTc0ODUwOTQzNSwiYXV0aF90aW1lIjoxNzQ4NTA5NDIxLCJqdGkiOiJlOTQyYjExMi01ZDY3LTRlY2MtODc3Zi00ODYzZDFjNTZiYmMiLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwOTEvcmVhbG1zL2NvcmciLCJhdWQiOiJjb3Jnd2ViIiwic3ViIjoiMjIwNzc5YmEtZjE4YS00MWU3LWEyMWMtODFhYjlhNjA3MzZhIiwidHlwIjoiSUQiLCJhenAiOiJjb3Jnd2ViIiwic2lkIjoiNDIyMTQ3ZTEtZTgxMC00MDljLTg5MTYtMTAyZTM2OWQ3ZmRjIiwiYXRfaGFzaCI6IlNGbXRUM0tIWUZzTWNNR2VJblVrNkEiLCJhY3IiOiIxIiwidGVybXNfYW5kX2NvbmRpdGlvbnMiOjE3NDUzMDg3NTEsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJhZGRyZXNzIjp7fSwibmFtZSI6IlBldGVyIEhhd2siLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJwaGF3ayIsImdpdmVuX25hbWUiOiJQZXRlciIsImZhbWlseV9uYW1lIjoiSGF3ayIsImFnZV9kZWNsYXJhdGlvbiI6InllcyIsImVtYWlsIjoicGhhd2tAZHNoci4zM21haWwuY29tIn0.bRHsvjzl11lEIypi0lATLMQxueZuYOYeuJigNFX9k2wN7D0V3sEfAa3ksBK9-cUMhs4AuVC1b3CNIBZJ-q5jSM4HzihX62pyuMzw2UI1vqdODua0Ty119AYIsspocOrMfyuRMhkQG19ks7gh4kYl84ZSf84c642m8pm2-PIgdFORCriB8MEntF4jZk4txXvMEhS5oPgr3vNIKoIFmvlG4Axn1DWltT3pSDQFK7TQpaND3zU3R2VjENqATPwmga-Gc4_rC6b_y9nZX7gbbl1Xe4P4Gk4XfJQla6j2ZAkI0O06Am7wg4XDnHC2SICYgRMUzjraL6KmZ0E0iV71FIEthw'
+    LogoutRequest:
+      summary: 'Jack Sparrow (Black Pearl)'
+      value:
+        client_id: 'black-pearl'
+        client_secret: 'euVXfNksq43R0XtE1NSMeSlzqK00tHgx'
+        refresh_token: 'eyJhbGciOiJIUzUxMiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJkNDY0Y2VhYS03NzBjLTQ2MWMtYTQyOC02NTdlMWM3M2Q0ZmUifQ.eyJleHAiOjE3NDc4MTM4MDEsImlhdCI6MTc0NzgxMjAwMSwianRpIjoiMDliMmM2ODYtM2NhMC00ZDk3LWIyYTEtZGI3YmY3Mjc3OGU0IiwiaXNzIjoiaHR0cDovL2xvY2FsaG9zdDo4MDkxL3JlYWxtcy9jb3JnIiwiYXVkIjoiaHR0cDovL2xvY2FsaG9zdDo4MDkxL3JlYWxtcy9jb3JnIiwic3ViIjoiMjIwNzc5YmEtZjE4YS00MWU3LWEyMWMtODFhYjlhNjA3MzZhIiwidHlwIjoiUmVmcmVzaCIsImF6cCI6ImNvcmd3ZWIiLCJzaWQiOiJkZWYyODA3OS02OTU2LTRjYTMtYmFiNy1jOTljYzFkYjU5MzgiLCJzY29wZSI6Im9wZW5pZCBlbWFpbCBiYXNpYyBhZ2VfZGVjbGFyYXRpb24gYWNyIHdlYi1vcmlnaW5zIHJvbGVzIHByb2ZpbGUifQ.sB5P2NEDrsPkTuxMw0eAYDS8EVfDlIxCZrHC962-lXQuj7CpLp57U2qPsj5ldZ9BQpPvebsFneKr3momR9FmqA'
+        post_logout_redirect_uri: 'https://balck-pearl.com/post-logout'
