@@ -6,7 +6,7 @@ window.onload = function() {
     // url: "https://petstore.swagger.io/v2/swagger.json",
     urls: [
       {
-        url: "../openapi/authentication/openapi.yaml",
+        url: "../../openapi/authentication/openapi.yaml",
         name: "Authentication"
       }
     ],
